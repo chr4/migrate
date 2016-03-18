@@ -19,48 +19,43 @@ import (
 
 // Up applies all available migrations
 func Up(pipe chan interface{}, url, migrationsPath string) {
+	defer pipep.Close(pipe, nil)
+
 	d, files, version, err := initDriverAndReadMigrationFilesAndGetVersion(url, migrationsPath)
 	if err != nil {
-		go pipep.Close(pipe, err)
+		pipe <- err
 		return
 	}
 
-	applyMigrationFiles, err := files.ToLastFrom(version)
-	if err != nil {
-		if err2 := d.Close(); err2 != nil {
-			pipe <- err2
-		}
-		go pipep.Close(pipe, err)
-		return
-	}
+	// Discarding error, files.ToLastFrom() always returns Files, nil
+	applyMigrationFiles, _ := files.ToLastFrom(version)
 
 	if len(applyMigrationFiles) > 0 {
 		for _, f := range applyMigrationFiles {
 			pipe1 := pipep.New()
 			go d.Migrate(f, pipe1)
+			// pipep.WaitAndRedirect() makes sure pipe1 is closed properly
 			if ok := pipep.WaitAndRedirect(pipe1, pipe, handleInterrupts()); !ok {
 				break
 			}
 		}
-		if err := d.Close(); err != nil {
-			pipe <- err
-		}
-		go pipep.Close(pipe, nil)
-		return
-	} else {
-		if err := d.Close(); err != nil {
-			pipe <- err
-		}
-		go pipep.Close(pipe, nil)
-		return
 	}
+
+	err = d.Close()
+	if err != nil {
+		pipe <- err
+	}
+
+	return
 }
 
 // UpSync is synchronous version of Up
 func UpSync(url, migrationsPath string) (err []error, ok bool) {
 	pipe := pipep.New()
+
 	go Up(pipe, url, migrationsPath)
 	err = pipep.ReadErrors(pipe)
+
 	return err, len(err) == 0
 }
 
