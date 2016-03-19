@@ -7,7 +7,6 @@ import (
 
 	"github.com/mattes/migrate/file"
 	"github.com/mattes/migrate/migrate/direction"
-	pipep "github.com/mattes/migrate/pipe"
 )
 
 // TestMigrate runs some additional tests on Migrate().
@@ -70,28 +69,23 @@ func TestMigrate(t *testing.T) {
 		},
 	}
 
-	pipe := pipep.New()
-	go d.Migrate(files[0], pipe)
-	errs := pipep.ReadErrors(pipe)
-	if len(errs) > 0 {
-		t.Fatal(errs)
+	err := d.Migrate(files[0])
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	pipe = pipep.New()
-	go d.Migrate(files[1], pipe)
-	errs = pipep.ReadErrors(pipe)
-	if len(errs) > 0 {
-		t.Fatal(errs)
+	err = d.Migrate(files[1])
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	pipe = pipep.New()
-	go d.Migrate(files[2], pipe)
-	errs = pipep.ReadErrors(pipe)
-	if len(errs) == 0 {
+	err = d.Migrate(files[2])
+	if err == nil {
 		t.Error("Expected test case to fail")
 	}
 
-	if err := d.Close(); err != nil {
+	err = d.Close()
+	if err != nil {
 		t.Fatal(err)
 	}
 }

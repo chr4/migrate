@@ -53,60 +53,48 @@ func (driver *Driver) FilenameExtension() string {
 	return "sql"
 }
 
-func (driver *Driver) Migrate(f file.File, pipe chan interface{}) {
-	defer close(pipe)
-	pipe <- f
-
+func (driver *Driver) Migrate(f file.File) (err error) {
 	tx, err := driver.db.Begin()
 	if err != nil {
-		pipe <- err
 		return
 	}
 
 	if f.Direction == direction.Up {
-		if _, err := tx.Exec("INSERT INTO "+tableName+" (version) VALUES ($1)", f.Version); err != nil {
-			pipe <- err
-			if err := tx.Rollback(); err != nil {
-				pipe <- err
-			}
+		if _, err = tx.Exec("INSERT INTO "+tableName+" (version) VALUES ($1)", f.Version); err != nil {
+			tx.Rollback()
 			return
 		}
 	} else if f.Direction == direction.Down {
-		if _, err := tx.Exec("DELETE FROM "+tableName+" WHERE version=$1", f.Version); err != nil {
-			pipe <- err
-			if err := tx.Rollback(); err != nil {
-				pipe <- err
-			}
+		if _, err = tx.Exec("DELETE FROM "+tableName+" WHERE version=$1", f.Version); err != nil {
+			tx.Rollback()
 			return
 		}
 	}
 
-	if err := f.ReadContent(); err != nil {
-		pipe <- err
+	err = f.ReadContent()
+	if err != nil {
 		return
 	}
 
-	if _, err := tx.Exec(string(f.Content)); err != nil {
+	_, err = tx.Exec(string(f.Content))
+	if err != nil {
 		pqErr := err.(*pq.Error)
-		offset, err := strconv.Atoi(pqErr.Position)
+		var offset int
+		offset, err = strconv.Atoi(pqErr.Position)
 		if err == nil && offset >= 0 {
 			lineNo, columnNo := file.LineColumnFromOffset(f.Content, offset-1)
 			errorPart := file.LinesBeforeAndAfter(f.Content, lineNo, 5, 5, true)
-			pipe <- errors.New(fmt.Sprintf("%s %v: %s in line %v, column %v:\n\n%s", pqErr.Severity, pqErr.Code, pqErr.Message, lineNo, columnNo, string(errorPart)))
+			err = errors.New(fmt.Sprintf("%s %v: %s in line %v, column %v:\n\n%s", pqErr.Severity, pqErr.Code, pqErr.Message, lineNo, columnNo, string(errorPart)))
 		} else {
-			pipe <- errors.New(fmt.Sprintf("%s %v: %s", pqErr.Severity, pqErr.Code, pqErr.Message))
+			err = errors.New(fmt.Sprintf("%s %v: %s", pqErr.Severity, pqErr.Code, pqErr.Message))
 		}
 
-		if err := tx.Rollback(); err != nil {
-			pipe <- err
-		}
+		tx.Rollback()
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
-		pipe <- err
-		return
-	}
+	err = tx.Commit()
+	return
 }
 
 func (driver *Driver) Version() (uint64, error) {
