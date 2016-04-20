@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/mattes/migrate/file"
-	"github.com/mattes/migrate/migrate/direction"
+	"github.com/chr4/migrate/file"
+	"github.com/chr4/migrate/migrate/direction"
 )
 
 // TestMigrate runs some additional tests on Migrate().
